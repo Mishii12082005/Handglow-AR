@@ -34,7 +34,6 @@
         const ctx = canvasElement.getContext('2d');
 
         let particles = [];
-        let lastFrame = null;
         let prevLandmarks = [];
 
         class Particle {
@@ -70,7 +69,8 @@
         });
 
         hands.onResults(results => {
-            lastFrame = results.image;
+            // Always draw video frame directly (works on PC + Phone)
+            ctx.drawImage(videoElement, 0, 0, 640, 480);
 
             if (results.multiHandLandmarks) {
                 results.multiHandLandmarks.forEach((landmarks, handIndex) => {
@@ -84,7 +84,7 @@
                         ctx.fillStyle = "skyblue";
                         ctx.fill();
 
-                        // Spread sparks along the movement path
+                        // Spread sparks along movement path
                         if (prevLandmarks[handIndex] && prevLandmarks[handIndex][i]) {
                             const prev = prevLandmarks[handIndex][i];
                             const dx = x - prev.x;
@@ -92,7 +92,6 @@
                             const dist = Math.sqrt(dx * dx + dy * dy);
 
                             if (dist > 5) {
-                                // Create sparks along the trail
                                 const steps = Math.floor(dist / 5);
                                 for (let s = 0; s < steps; s++) {
                                     const trailX = prev.x + (dx / dist) * s * 5;
@@ -112,10 +111,6 @@
 
         function animate() {
             requestAnimationFrame(animate);
-
-            if (lastFrame) {
-                ctx.drawImage(lastFrame, 0, 0, 640, 480);
-            }
 
             for (let i = particles.length - 1; i >= 0; i--) {
                 let p = particles[i];
