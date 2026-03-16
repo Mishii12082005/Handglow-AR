@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Hand Sparks Trail</title>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background: black;
+        }
+        
+        video {
+            display: none;
+        }
+        
+        canvas {
+            position: absolute;
+            left: 0;
+            top: 0;
+        }
+    </style>
+</head>
+
+<body>
+    <video id="input_video" autoplay playsinline></video>
+    <canvas id="output_canvas" width="640" height="480"></canvas>
+
+    <script>
+        const videoElement = document.getElementById('input_video');
+        const canvasElement = document.getElementById('output_canvas');
+        const ctx = canvasElement.getContext('2d');
+
+        let particles = [];
+        let lastFrame = null;
+        let prevLandmarks = [];
+
+        class Particle {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.vx = (Math.random() - 0.5) * 8;
+                this.vy = (Math.random() - 0.5) * 8;
+                this.life = 25;
+            }
+            update() {
+                this.x += this.vx;
+                this.y += this.vy;
+                this.life--;
+            }
+            draw() {
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, 3, 0, Math.PI * 2);
+                ctx.fillStyle = `rgba(135,206,250,${this.life/25})`; // skyblue
+                ctx.fill();
+            }
+        }
+
+        const hands = new Hands({
+            locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+        });
+
+        hands.setOptions({
+            maxNumHands: 2,
+            modelComplexity: 1,
+            minDetectionConfidence: 0.7,
+            minTrackingConfidence: 0.7
+        });
+
+        hands.onResults(results => {
+            lastFrame = results.image;
+
+            if (results.multiHandLandmarks) {
+                results.multiHandLandmarks.forEach((landmarks, handIndex) => {
+                    landmarks.forEach((point, i) => {
+                        const x = point.x * 640;
+                        const y = point.y * 480;
+
+                        // Glow on fingertip
+                        ctx.beginPath();
+                        ctx.arc(x, y, 6, 0, Math.PI * 2);
+                        ctx.fillStyle = "skyblue";
+                        ctx.fill();
+
+                        // Spread sparks along the movement path
+                        if (prevLandmarks[handIndex] && prevLandmarks[handIndex][i]) {
+                            const prev = prevLandmarks[handIndex][i];
+                            const dx = x - prev.x;
+                            const dy = y - prev.y;
+                            const dist = Math.sqrt(dx * dx + dy * dy);
+
+                            if (dist > 5) {
+                                // Create sparks along the trail
+                                const steps = Math.floor(dist / 5);
+                                for (let s = 0; s < steps; s++) {
+                                    const trailX = prev.x + (dx / dist) * s * 5;
+                                    const trailY = prev.y + (dy / dist) * s * 5;
+                                    particles.push(new Particle(trailX, trailY));
+                                }
+                            }
+                        }
+                    });
+                    prevLandmarks[handIndex] = landmarks.map(p => ({
+                        x: p.x * 640,
+                        y: p.y * 480
+                    }));
+                });
+            }
+        });
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            if (lastFrame) {
+                ctx.drawImage(lastFrame, 0, 0, 640, 480);
+            }
+
+            for (let i = particles.length - 1; i >= 0; i--) {
+                let p = particles[i];
+                p.update();
+                p.draw();
+                if (p.life <= 0) particles.splice(i, 1);
+            }
+        }
+        animate();
+
+        const camera = new Camera(videoElement, {
+            onFrame: async() => {
+                await hands.send({
+                    image: videoElement
+                });
+            },
+            width: 640,
+            height: 480
+        });
+        camera.start();
+    </script>
+</body>
+
+</html>
